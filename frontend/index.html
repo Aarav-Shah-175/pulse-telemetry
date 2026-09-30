@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pulse — System Monitor</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, sans-serif;
+            padding: 20px;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 14px;
+            margin-bottom: 20px;
+        }
+
+        .tag {
+            background: #1e293b;
+            border: 1px solid #334155;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 13px;
+            color: #94a3b8;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #eab308;
+        }
+
+        .dot.connected {
+            background: #22c55e;
+        }
+
+        .dot.disconnected {
+            background: #ef4444;
+        }
+
+        .grid-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 14px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            padding: 14px;
+        }
+
+        .card-label {
+            font-size: 12px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .card-val {
+            font-size: 26px;
+            font-weight: 600;
+            font-family: monospace;
+        }
+
+        .card-sub {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 2px;
+        }
+
+        .grid-charts {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 800px) {
+            .grid-charts {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .chart-box {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            padding: 14px;
+        }
+
+        .chart-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #e2e8f0;
+        }
+
+        .canvas-wrap {
+            height: 230px;
+            position: relative;
+        }
+
+        .log-box {
+            background: #0b1120;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            padding: 10px 14px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="topbar">
+        <h2>Pulse Dashboard</h2>
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <span class="tag">tenant: org_apple</span>
+            <div class="status"><span class="dot" id="dot"></span><span id="stext">Connecting...</span></div>
+        </div>
+    </div>
+
+    <div class="grid-stats">
+        <div class="card">
+            <div class="card-label">CPU Load</div>
+            <div class="card-val"><span id="cpuVal">--</span>%</div>
+            <div class="card-sub" id="cpuSub">Waiting for stream...</div>
+        </div>
+        <div class="card">
+            <div class="card-label">RAM Usage</div>
+            <div class="card-val"><span id="ramVal">--</span>%</div>
+            <div class="card-sub" id="ramSub">Waiting for stream...</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Host Node</div>
+            <div class="card-val" style="font-size: 18px;" id="hostVal">--</div>
+            <div class="card-sub" id="timeVal">Last update: --</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Packets</div>
+            <div class="card-val" id="pkts">0</div>
+            <div class="card-sub">Channel: metrics:org_apple</div>
+        </div>
+    </div>
+
+    <div class="grid-charts">
+        <div class="chart-box">
+            <div class="chart-title">CPU Utilization (%)</div>
+            <div class="canvas-wrap"><canvas id="cpuChart"></canvas></div>
+        </div>
+        <div class="chart-box">
+            <div class="chart-title">RAM Utilization (%)</div>
+            <div class="canvas-wrap"><canvas id="ramChart"></canvas></div>
+        </div>
+    </div>
+
+    <div class="log-box" id="log">Connecting to WebSocket broker...</div>
+
+    <script>
+        const MAX_POINTS = 50;
+        let count = 0;
+        const WS_URL = `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host || "localhost:8000"}/ws?token=mock_jwt_here`;
+
+        // Factory function for clean chart initialization
+        function makeChart(canvasId, color) {
+            return new Chart(document.getElementById(canvasId), {
+                type: 'line',
+                data: { labels: [], datasets: [{ data: [], borderColor: color, borderWidth: 2, fill: false, pointRadius: 0 }] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    scales: {
+                        x: { grid: { color: '#334155' }, ticks: { color: '#94a3b8', font: { family: 'monospace', size: 10 }, maxTicksLimit: 6 } },
+                        y: { min: 0, max: 100, grid: { color: '#334155' }, ticks: { color: '#94a3b8', font: { family: 'monospace', size: 10 }, callback: v => v + '%' } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        const cpuChart = makeChart('cpuChart', '#38bdf8');
+        const ramChart = makeChart('ramChart', '#34d399');
+
+        function updateSeries(chart, label, value) {
+            chart.data.labels.push(label);
+            chart.data.datasets[0].data.push(value);
+            if (chart.data.labels.length > MAX_POINTS) {
+                chart.data.labels.shift();
+                chart.data.datasets[0].data.shift();
+            }
+            chart.update('none');
+        }
+
+        function connect() {
+            const ws = new WebSocket(WS_URL);
+            ws.onopen = () => {
+                document.getElementById('dot').className = 'dot connected';
+                document.getElementById('stext').innerText = 'Connected';
+            };
+            ws.onmessage = (e) => {
+                const d = JSON.parse(e.data);
+                document.getElementById('pkts').innerText = ++count;
+                const time = d.timestamp ? new Date(d.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+
+                document.getElementById('cpuVal').innerText = Number(d.cpu).toFixed(1);
+                document.getElementById('ramVal').innerText = Number(d.ram).toFixed(1);
+                document.getElementById('hostVal').innerText = d.hostname || 'Node';
+                document.getElementById('timeVal').innerText = `Updated: ${time}`;
+                document.getElementById('cpuSub').innerText = `Current load: ${d.cpu}%`;
+                if (d.ram_used_gb) document.getElementById('ramSub').innerText = `${d.ram_used_gb} GB / ${d.ram_total_gb} GB`;
+
+                updateSeries(cpuChart, time, d.cpu);
+                updateSeries(ramChart, time, d.ram);
+                document.getElementById('log').innerText = `[${time}] ${d.hostname} | CPU: ${d.cpu}% | RAM: ${d.ram}%`;
+            };
+            ws.onclose = () => {
+                document.getElementById('dot').className = 'dot disconnected';
+                document.getElementById('stext').innerText = 'Disconnected';
+                setTimeout(connect, 3000);
+            };
+        }
+
+        window.addEventListener('DOMContentLoaded', connect);
+    </script>
+</body>
+
+</html>
