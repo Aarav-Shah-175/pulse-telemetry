@@ -1,11 +1,12 @@
 <div align="center">
 
-# Pulse — Real-Time System Telemetry & Monitoring
+# ⚡ Pulse — Real-Time System Telemetry & Monitoring
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![WebSockets](https://img.shields.io/badge/WebSockets-010101?style=for-the-badge&logo=socketdotio&logoColor=white)](https://websockets.readthedocs.io/)
 [![Redis](https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io/)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 [![Chart.js](https://img.shields.io/badge/Chart.js-FF6384?style=for-the-badge&logo=chartdotjs&logoColor=white)](https://www.chartjs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 
@@ -21,7 +22,7 @@
 
 Data is dynamically routed through a **Redis Pub/Sub broker** into tenant-isolated channels (`metrics:<tenant_id>`) and pushed live to browser dashboards with zero-lag Chart.js visualization.
 
-> **Zero-Setup Dev Mode:** Pulse includes an automatic in-memory broadcast fallback, so you can run and test everything locally without needing Docker or a live Redis instance.
+> **Zero-Setup Dev Mode:** Pulse includes an automatic in-memory broadcast fallback, so you can run and test everything locally with or without Docker/Redis.
 
 ---
 
@@ -78,28 +79,48 @@ Data is dynamically routed through a **Redis Pub/Sub broker** into tenant-isolat
 ```text
 Pulse/
 ├── backend/
-│   ├── broker.py      # Async Redis Pub/Sub manager + in-memory fallback
-│   └── main.py        # FastAPI server, WebSocket hub, and static file host
+│   ├── broker.py          # Async Redis Pub/Sub manager + in-memory fallback
+│   └── main.py            # FastAPI server, WebSocket hub, and static file host
 ├── agent/
-│   └── client.py      # Edge hardware agent using psutil
+│   └── client.py          # Edge hardware agent using psutil
 ├── frontend/
-│   └── index.html     # Minimalistic real-time Chart.js dashboard
-├── .env.example       # Template environment configuration
-├── requirements.txt   # Python project dependencies
-└── README.md          # Documentation
+│   └── index.html         # Minimalistic real-time Chart.js dashboard
+├── Dockerfile             # Container definition for Pulse Hub
+├── docker-compose.yml     # Multi-container orchestration (Redis + Hub)
+├── .env.example           # Template environment configuration
+├── requirements.txt       # Python project dependencies
+└── README.md              # Documentation
 ```
 
 ---
 
-## 🚀 Quickstart Guide
+## 🚀 Quickstart
 
-### 1. Clone & Setup Environment
+### Option A: Run with Docker Compose (Recommended for Production/Redis)
+
+Spin up both the **Redis Broker** and the **FastAPI Monitoring Hub** with one command:
 
 ```bash
+docker compose up --build
+```
+The server will be available at `http://localhost:8000`.
+
+Then start the local edge agent in your terminal:
+```bash
+python agent/client.py
+```
+
+---
+
+### Option B: Run Locally with Python (Zero-Setup Dev Mode)
+
+#### 1. Setup Environment
+```bash
+# Clone repository
 git clone https://github.com/<your-username>/pulse-telemetry.git
 cd pulse-telemetry
 
-# Create & activate virtual environment
+# Create virtual environment
 python -m venv .venv
 # On Windows:
 .venv\Scripts\Activate.ps1
@@ -108,34 +129,22 @@ source .venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
-```
-
-### 2. Configure Environment
-
-Copy the template config to `.env`:
-
-```bash
 cp .env.example .env
 ```
 
-### 3. Start the FastAPI Server
-
+#### 2. Start the Server
 ```bash
 uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 ```
-The server will boot up and host both the WebSocket hub and the dashboard at `http://localhost:8000`.
 
-### 4. Run the Edge Telemetry Agent
-
-In a separate terminal tab:
-
+#### 3. Start the Telemetry Agent
+In a second terminal:
 ```bash
 python agent/client.py
 ```
 
-### 5. Open the Dashboard
-
-Open your browser to [http://localhost:8000](http://localhost:8000). The dashboard will connect, authenticate, and begin graphing real-time hardware telemetry immediately.
+#### 4. Open the Dashboard
+Visit [http://localhost:8000](http://localhost:8000) in your browser. The dashboard connects via WebSockets and begins streaming live hardware stats.
 
 ---
 

@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  # Redis Pub/Sub Message Broker
+  redis:
+    image: redis:7-alpine
+    container_name: pulse-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Pulse FastAPI Hub & Dashboard
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pulse-server
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=pulse_enterprise_secret_key_2026
+      - JWT_ALGORITHM=HS256
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  redis-data:
+    driver: local
